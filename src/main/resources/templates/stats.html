@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="uk" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статистика гравця | Dota 2 Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --accent: #e84d1c;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --success: #3fb950;
+            --warn: #d29922;
+            --info: #58a6ff;
+            --purple: #bc8cff;
+            --radius: 10px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
+
+        /* ── Header ── */
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 40px;
+            display: flex; align-items: center; gap: 14px;
+            height: 64px;
+        }
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, #e84d1c, #f05f34);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+        header h1 { font-size: 1.15rem; font-weight: 700; }
+        a.back { margin-left: auto; color: var(--muted); font-size: .88rem; text-decoration: none; }
+        a.back:hover { color: var(--text); }
+
+        /* Delete button */
+        .btn-danger {
+            margin-left: 16px; padding: 7px 16px;
+            background: transparent; border: 1px solid var(--accent);
+            border-radius: 6px; color: var(--accent);
+            font-size: .82rem; font-weight: 600;
+            cursor: pointer; font-family: inherit;
+            transition: background .15s, color .15s;
+        }
+        .btn-danger:hover { background: var(--accent); color: #fff; }
+
+        /* ── Layout ── */
+        main {
+            max-width: 1200px; margin: 40px auto;
+            padding: 0 24px;
+            display: flex; flex-direction: column; gap: 28px;
+        }
+
+        /* ── Period filter ── */
+        .period-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .period-bar span { color: var(--muted); font-size: .82rem; margin-right: 4px; }
+        .period-btn {
+            padding: 6px 16px; border-radius: 6px;
+            border: 1px solid var(--border); background: var(--surface);
+            color: var(--muted); font-size: .82rem;
+            cursor: pointer; text-decoration: none; transition: all .15s;
+        }
+        .period-btn:hover { border-color: var(--accent); color: var(--text); }
+        .period-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+        /* ── Aggregated stat cards ── */
+        .agg-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 14px;
+        }
+        .agg-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 18px 20px;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .agg-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+        .agg-value { font-size: 1.5rem; font-weight: 700; }
+        .agg-value.kda   { color: var(--warn); }
+        .agg-value.gpm   { color: var(--success); }
+        .agg-value.loss  { color: var(--accent); }
+
+        /* ── Charts section ── */
+        .charts-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 28px 32px;
+        }
+        .charts-card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 18px; }
+
+        /* Toggle buttons for charts */
+        .chart-toggle-bar {
+            display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+        }
+        .chart-btn {
+            padding: 7px 18px;
+            border-radius: 6px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--muted);
+            font-size: .82rem; font-weight: 500;
+            cursor: pointer; font-family: inherit; transition: all .15s;
+        }
+        .chart-btn:hover { border-color: var(--muted); color: var(--text); }
+        .chart-btn.active { border-color: currentColor; font-weight: 700; }
+        .chart-btn[data-chart="kda"].active   { color: var(--warn); }
+        .chart-btn[data-chart="kills"].active { color: var(--success); }
+        .chart-btn[data-chart="deaths"].active{ color: var(--accent); }
+        .chart-btn[data-chart="assists"].active{ color: var(--info); }
+        .chart-btn[data-chart="gpm"].active   { color: #3fb950; }
+        .chart-btn[data-chart="xpm"].active   { color: var(--purple); }
+
+        .chart-container {
+            position: relative; height: 280px; display: none;
+        }
+        .chart-container.active { display: block; }
+
+        /* ── Match history table ── */
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 28px 32px;
+        }
+        h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 18px; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; color: var(--muted);
+            font-size: .75rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: .05em;
+            padding: 10px 12px; border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        td {
+            padding: 12px 12px; font-size: .86rem;
+            border-bottom: 1px solid var(--border); vertical-align: middle;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255,255,255,.02); }
+
+        .kda    { font-weight: 600; }
+        .match-id  { font-family: monospace; font-size: .75rem; color: var(--muted); }
+        .win    { color: var(--success); }
+        .loss   { color: var(--accent); }
+        .stat-pill { background: rgba(255,255,255,.06); border-radius: 4px; padding: 2px 8px; font-size: .80rem; }
+        .mono-sm { font-size: .80rem; color: var(--muted); }
+
+        .badge-ranked   { background: rgba(218,162,34,.15); color: var(--warn); border: 1px solid rgba(218,162,34,.35); border-radius: 4px; padding: 2px 8px; font-size: .75rem; font-weight: 600; }
+        .badge-unranked { background: rgba(139,148,158,.12); color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: .75rem; }
+        .badge-battlecup { background: rgba(188,140,255,.15); color: var(--purple); border: 1px solid rgba(188,140,255,.35); border-radius: 4px; padding: 2px 8px; font-size: .75rem; font-weight: 600; }
+
+        .empty-state { text-align: center; padding: 56px 0; color: var(--muted); }
+        .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+
+        .hero-icon { width: 48px; height: 27px; border-radius: 4px; object-fit: cover; vertical-align: middle; }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="logo-icon">🎮</div>
+        <h1>Статистика матчів</h1>
+        <a class="back" href="/">← Назад до списку</a>
+
+        <!-- Delete Player — POST because HTML forms can't send DELETE -->
+        <form th:action="@{/players/{id}/delete(id=${playerId})}" method="post"
+              onsubmit="return confirm('Видалити цього гравця та всю його статистику?')">
+            <button type="submit" class="btn-danger">🗑 Видалити гравця</button>
+        </form>
+    </header>
+
+    <main>
+
+        <!-- ── Period filter ── -->
+        <div class="period-bar">
+            <span>Фільтр:</span>
+            <a th:href="@{/players/{id}(id=${playerId}, period='ALL_TIME')}"
+               th:classappend="${period == 'ALL_TIME'} ? ' active'" class="period-btn">Весь час</a>
+            <a th:href="@{/players/{id}(id=${playerId}, period='LAST_YEAR')}"
+               th:classappend="${period == 'LAST_YEAR'}  ? ' active'" class="period-btn">За рік</a>
+            <a th:href="@{/players/{id}(id=${playerId}, period='LAST_MONTH')}"
+               th:classappend="${period == 'LAST_MONTH'} ? ' active'" class="period-btn">За місяць</a>
+            <a th:href="@{/players/{id}(id=${playerId}, period='LAST_WEEK')}"
+               th:classappend="${period == 'LAST_WEEK'}  ? ' active'" class="period-btn">За тиждень</a>
+        </div>
+
+        <!-- ── Aggregated stat cards ── -->
+        <div class="agg-grid" th:if="${aggregated != null and aggregated.matchCount > 0}">
+            <div class="agg-card"><span class="agg-label">Матчів</span>
+                <span class="agg-value" th:text="${aggregated.matchCount}">0</span></div>
+            <div class="agg-card"><span class="agg-label">Avg KDA</span>
+                <span class="agg-value kda" th:text="${aggregated.avgKda}">0.00</span></div>
+            <div class="agg-card"><span class="agg-label">Avg Kills</span>
+                <span class="agg-value win" th:text="${aggregated.avgKills}">0.00</span></div>
+            <div class="agg-card"><span class="agg-label">Avg Deaths</span>
+                <span class="agg-value loss" th:text="${aggregated.avgDeaths}">0.00</span></div>
+            <div class="agg-card"><span class="agg-label">Avg Assists</span>
+                <span class="agg-value" th:text="${aggregated.avgAssists}">0.00</span></div>
+            <div class="agg-card"><span class="agg-label">Avg GPM</span>
+                <span class="agg-value gpm" th:text="${aggregated.avgGpm}">0.00</span></div>
+            <div class="agg-card"><span class="agg-label">Avg XPM</span>
+                <span class="agg-value" th:text="${aggregated.avgXpm}">0.00</span></div>
+        </div>
+
+        <!--
+        ╔═════════════════════════════════════════════════════════════════╗
+        ║  TOGGLEABLE CHARTS SECTION                                     ║
+        ║                                                                 ║
+        ║  Six separate Chart.js canvases are rendered:                  ║
+        ║    KDA, Kills, Deaths, Assists, GPM, XPM                       ║
+        ║                                                                 ║
+        ║  Only one is visible at a time (CSS display:none/block).       ║
+        ║  Toggle buttons call showChart(key) which hides all panels     ║
+        ║  and shows the chosen one.                                      ║
+        ║                                                                 ║
+        ║  All data is injected server-side via Thymeleaf inline         ║
+        ║  syntax: /*[[${modelAttr}]]*/ []                               ║
+        ╚═════════════════════════════════════════════════════════════════╝
+        -->
+        <div class="charts-card" th:if="${!stats.isEmpty()}">
+            <h2>📈 Статистика по матчах</h2>
+
+            <!-- Toggle buttons — one per chart series -->
+            <div class="chart-toggle-bar">
+                <button class="chart-btn active" data-chart="kda"     onclick="showChart('kda')">KDA</button>
+                <button class="chart-btn"        data-chart="kills"   onclick="showChart('kills')">Kills</button>
+                <button class="chart-btn"        data-chart="deaths"  onclick="showChart('deaths')">Deaths</button>
+                <button class="chart-btn"        data-chart="assists" onclick="showChart('assists')">Assists</button>
+                <button class="chart-btn"        data-chart="gpm"     onclick="showChart('gpm')">GPM</button>
+                <button class="chart-btn"        data-chart="xpm"     onclick="showChart('xpm')">XPM</button>
+            </div>
+
+            <!-- One canvas per chart; only the active one is displayed -->
+            <div class="chart-container active" id="panel-kda">
+                <canvas id="chart-kda"></canvas>
+            </div>
+            <div class="chart-container" id="panel-kills">
+                <canvas id="chart-kills"></canvas>
+            </div>
+            <div class="chart-container" id="panel-deaths">
+                <canvas id="chart-deaths"></canvas>
+            </div>
+            <div class="chart-container" id="panel-assists">
+                <canvas id="chart-assists"></canvas>
+            </div>
+            <div class="chart-container" id="panel-gpm">
+                <canvas id="chart-gpm"></canvas>
+            </div>
+            <div class="chart-container" id="panel-xpm">
+                <canvas id="chart-xpm"></canvas>
+            </div>
+        </div>
+
+        <!-- ── Match history table ── -->
+        <div class="card">
+            <h2>Матчі гравця #<span th:text="${playerId}">1</span></h2>
+
+            <div class="empty-state" th:if="${stats.isEmpty()}">
+                <div class="icon">🕹️</div>
+                <p>Немає даних. Натисни <strong>Sync</strong> на головній сторінці!</p>
+            </div>
+
+            <table th:if="${!stats.isEmpty()}">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Тривалість</th>
+                        <th>Match ID</th>
+                        <th>Герой</th>
+                        <th>Режим</th>
+                        <th>Результат</th>
+                        <th>K / D / A</th>
+                        <th>GPM</th>
+                        <th>XPM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="s : ${stats}">
+                        <!-- Date & Duration from helper methods -->
+                        <td class="mono-sm" th:text="${s.formattedDate()}">25 Mar 2025, 21:10</td>
+                        <td class="mono-sm" th:text="${s.formattedDuration()}">32:23</td>
+
+                        <td class="match-id" th:text="${s.matchId}">7812345678</td>
+
+                        <!-- Hero icon -->
+                        <td>
+                            <img th:if="${s.heroId != null and s.heroId > 0}"
+                                 th:src="@{'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/icons/' + ${s.heroId} + '.png'}"
+                                 th:alt="'Hero ' + ${s.heroId}" class="hero-icon" onerror="this.style.display='none'" />
+                            <span th:if="${s.heroId == null or s.heroId == 0}" class="stat-pill">–</span>
+                        </td>
+
+                        <!--
+                            Lobby Type column.
+                            lobbyLabel() maps:  7 → "Ranked"  |  9 → "Battle Cup"  |  * → "Unranked"
+                            Different badge styles per type for quick visual scanning.
+                        -->
+                        <td>
+                            <span th:if="${s.lobbyType == 7}"  class="badge-ranked">★ Ranked</span>
+                            <span th:if="${s.lobbyType == 9}"  class="badge-battlecup">🏆 Battle Cup</span>
+                            <span th:if="${s.lobbyType != 7 and s.lobbyType != 9}" class="badge-unranked"
+                                  th:text="${s.lobbyLabel()}">Unranked</span>
+                        </td>
+
+                        <!--
+                            Win / Loss column.
+                            isWin() in PlayerMatchStatDto calculates the result for THIS player:
+                              - playerSlot < 128  → Radiant → wins when radiantWin == true
+                              - playerSlot >= 128 → Dire    → wins when radiantWin == false
+                            Returns null if either field is missing (e.g. old data before sync).
+                        -->
+                        <td>
+                            <span th:if="${s.isWin() == null}"  class="stat-pill">–</span>
+                            <span th:if="${s.isWin() == true}"  class="win"  style="font-weight:600">✓ Win</span>
+                            <span th:if="${s.isWin() == false}" class="loss" style="font-weight:600">✗ Loss</span>
+                        </td>
+
+                        <!-- KDA -->
+                        <td class="kda">
+                            <span class="win"  th:text="${s.kills}">0</span>
+                            <span style="color:var(--muted)"> / </span>
+                            <span class="loss" th:text="${s.deaths}">0</span>
+                            <span style="color:var(--muted)"> / </span>
+                            <span th:text="${s.assists}">0</span>
+                        </td>
+                        <td th:text="${s.gpm}">0</td>
+                        <td th:text="${s.xpm}">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </main>
+
+    <!--
+    ╔══════════════════════════════════════════════════════════════════════════╗
+    ║  CHART.JS INITIALISATION                                               ║
+    ║                                                                          ║
+    ║  All six charts are built on page load. Only one is visible at a time.  ║
+    ║  showChart(key) hides all panels and shows the requested one.           ║
+    ╚══════════════════════════════════════════════════════════════════════════╝
+    -->
+    <script th:if="${!stats.isEmpty()}" th:inline="javascript">
+        /*<![CDATA[*/
+
+        // ── Data arrays injected by Thymeleaf at render time ──────────────────
+        const labels    = /*[[${chartLabels}]]*/  [];
+        const kdaData   = /*[[${kdaList}]]*/      [];
+        const killsData = /*[[${killsList}]]*/    [];
+        const deathData = /*[[${deathsList}]]*/   [];
+        const assistData= /*[[${assistsList}]]*/  [];
+        const gpmData   = /*[[${gpmList}]]*/      [];
+        const xpmData   = /*[[${xpmList}]]*/      [];
+
+        // ── Shared chart config helper ─────────────────────────────────────────
+        const chartDefaults = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { color: '#e6edf3', font: { family: 'Inter', size: 13 } } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}` } }
+            },
+            scales: {
+                x: { ticks: { color: '#8b949e', maxRotation: 30, font: { size: 11 } }, grid: { color: 'rgba(48,54,61,0.6)' } },
+                y: { ticks: { color: '#8b949e' }, grid: { color: 'rgba(48,54,61,0.6)' }, beginAtZero: false }
+            }
+        };
+
+        function makeDataset(label, data, color) {
+            return {
+                label, data,
+                borderColor: color,
+                backgroundColor: color.replace(')', ', 0.08)').replace('rgb(', 'rgba(').replace('#', 'rgba(').replace(/rgba\(([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2}), 0.08\)/, (_, r, g, b) => `rgba(${parseInt(r,16)}, ${parseInt(g,16)}, ${parseInt(b,16)}, 0.08)`),
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                tension: 0.35,
+                fill: true
+            };
+        }
+
+        // ── Build all six charts ───────────────────────────────────────────────
+        const CHARTS = {
+            kda:     { el: 'chart-kda',     color: '#d29922', dataset: makeDataset('KDA',     kdaData,    '#d29922') },
+            kills:   { el: 'chart-kills',   color: '#3fb950', dataset: makeDataset('Kills',   killsData,  '#3fb950') },
+            deaths:  { el: 'chart-deaths',  color: '#e84d1c', dataset: makeDataset('Deaths',  deathData,  '#e84d1c') },
+            assists: { el: 'chart-assists', color: '#58a6ff', dataset: makeDataset('Assists', assistData, '#58a6ff') },
+            gpm:     { el: 'chart-gpm',     color: '#39d353', dataset: makeDataset('GPM',     gpmData,    '#39d353') },
+            xpm:     { el: 'chart-xpm',     color: '#bc8cff', dataset: makeDataset('XPM',     xpmData,    '#bc8cff') }
+        };
+
+        Object.entries(CHARTS).forEach(([key, cfg]) => {
+            const ctx = document.getElementById(cfg.el);
+            if (ctx && labels.length > 0) {
+                new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets: [cfg.dataset] },
+                    options: JSON.parse(JSON.stringify(chartDefaults))   // deep-clone for each chart
+                });
+            }
+        });
+
+        // ── Toggle logic ───────────────────────────────────────────────────────
+        function showChart(key) {
+            // Hide all panels
+            document.querySelectorAll('.chart-container').forEach(el => el.classList.remove('active'));
+            // Deactivate all buttons
+            document.querySelectorAll('.chart-btn').forEach(el => el.classList.remove('active'));
+            // Show requested panel
+            const panel = document.getElementById('panel-' + key);
+            if (panel) panel.classList.add('active');
+            // Activate corresponding button
+            const btn = document.querySelector(`.chart-btn[data-chart="${key}"]`);
+            if (btn) btn.classList.add('active');
+        }
+
+        /*]]>*/
+    </script>
+
+</body>
+</html>

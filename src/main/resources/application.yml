@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    # ─────────────────────────────────────────────────────────────────────────
+    # PostgreSQL connection settings.
+    # Replace 'dota2db', 'postgres', and 'password' with your actual values.
+    # ─────────────────────────────────────────────────────────────────────────
+    url: jdbc:postgresql://localhost:5432/dota2db
+    username: postgres
+    password: admin
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Jackson global config
+  jackson:
+    property-naming-strategy: SNAKE_CASE   # Maps JSON snake_case -> Java camelCase automatically
+
+server:
+  port: 8080
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Custom application properties for OpenDota API
+# ─────────────────────────────────────────────────────────────────────────────
+opendota:
+  api:
+    base-url: https://api.opendota.com/api
+    api-key: b34aea12-c477-4657-9a3b-9bf8342b9bae
+
+logging:
+  level:
+    com.dota2tracker: DEBUG          # Show our own classes at DEBUG level
+    org.springframework.web: INFO
